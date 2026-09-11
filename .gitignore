@@ -46,3 +46,17 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Uploads
+uploads/
+camara_backend/uploads/
+
+# Node modules
+node_modules/
+camara_backend/node_modules/
+
