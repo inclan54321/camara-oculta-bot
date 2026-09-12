@@ -54,14 +54,11 @@ const GRUPOS = {
 // POSTGRESQL
 // =============================================
 
-console.log('🔌 Conectando a PostgreSQL...');
+console.log('🔌 Conectando a PostgreSQL (Neon)...');
 
 const pool = new Pool({
-    user: process.env.DB_USER || 'postgres',
-    host: process.env.DB_HOST || 'localhost',
-    database: process.env.DB_NAME || 'railway',
-    password: process.env.DB_PASSWORD || 'Knives1997.1',
-    port: process.env.DB_PORT || 5432,
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
 });
 
 // =============================================
