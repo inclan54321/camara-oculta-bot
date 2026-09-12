@@ -16,8 +16,9 @@ const CHAT_ID = process.env.CHAT_ID || "ID_GRUPO";
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || "TU_API_KEY";
 
 console.log('✅ Configuración cargada');
+
 // =============================================
-// MAPEO DE CATEGORÍAS A GRUPOS  ← AQUÍ VA
+// MAPEO DE CATEGORÍAS A GRUPOS
 // =============================================
 
 const GRUPOS = {
@@ -48,6 +49,7 @@ const GRUPOS = {
     'adaptadores': process.env.GRUPO_ADAPTADORES,
     'erotico': process.env.GRUPO_EROTICO,
 };
+
 // =============================================
 // POSTGRESQL
 // =============================================
@@ -63,12 +65,49 @@ const pool = new Pool({
 });
 
 // =============================================
-// INICIALIZAR BOT (CORREGIDO)
+// INICIALIZAR BOT
 // =============================================
 
 console.log('🤖 Inicializando bot de Telegram...');
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 console.log('✅ Bot de Telegram inicializado');
+
+// =============================================
+// LOGS DE DIAGNÓSTICO
+// =============================================
+
+// Verificar identidad del bot
+bot.getMe().then((info) => {
+    console.log(`\n✅ INFO DEL BOT:`);
+    console.log(`   ID: ${info.id}`);
+    console.log(`   Nombre: ${info.first_name}`);
+    console.log(`   Username: @${info.username}`);
+    console.log(`   Token (primeros 20): ${BOT_TOKEN.substring(0, 20)}...`);
+}).catch((error) => {
+    console.error(`❌ Error al obtener info del bot: ${error.message}`);
+});
+
+// Capturar errores de polling
+bot.on('polling_error', (error) => {
+    console.error(`\n❌ ERROR DE POLLING:`);
+    console.error(`   Código: ${error.code}`);
+    console.error(`   Mensaje: ${error.message}`);
+    console.error(`   Timestamp: ${new Date().toISOString()}`);
+});
+
+// Capturar errores generales
+bot.on('error', (error) => {
+    console.error(`\n❌ ERROR GENERAL: ${error.message}`);
+});
+
+// Capturar mensajes recibidos
+bot.on('message', (msg) => {
+    console.log(`\n📩 MENSAJE RECIBIDO:`);
+    console.log(`   De: ${msg.from?.first_name} (@${msg.from?.username})`);
+    console.log(`   Chat ID: ${msg.chat.id}`);
+    console.log(`   Chat tipo: ${msg.chat.type}`);
+    console.log(`   Texto: ${msg.text || 'Sin texto'}`);
+});
 
 // =============================================
 // FUNCIÓN: Analizar con DeepSeek
@@ -91,47 +130,47 @@ async function analizarConDeepSeek(rutaFoto) {
 
         console.log('📤 Enviando a DeepSeek API...');
         
- const response = await axios.post(
-    'https://api.deepseek.com/chat/completions',
-    {
-        model: "deepseek-v4-flash-vision-exp",
-        messages: [
+        const response = await axios.post(
+            'https://api.deepseek.com/chat/completions',
             {
-                role: "user",
-                content: [
+                model: "deepseek-v4-flash-vision-exp",
+                messages: [
                     {
-                        type: "text",
-                        text: "Describe este producto en este formato exacto:\nNombre: [nombre]\nCategoria: [elige UNA: acuariofilia, cocina, computacion, iluminacion, hogar, herramientas, impresion3d, mascotas, electronica, peliculas, radiocontrol, camping, agricultura, juguetes, fotografia, deportes, videojuegos, musica, estetica, arte, vehiculos, manualidades, figuras, juegosdemesa, adaptadores, erotico]\nDescripcion: [descripcion]"
-                    },
-                  {
-    type: "image_url",
-    image_url: {
-        url: `data:image/jpeg;base64,${imagenBase64}`
-    }
-}
-                ]
+                        role: "user",
+                        content: [
+                            {
+                                type: "text",
+                                text: "Describe este producto en este formato exacto:\nNombre: [nombre]\nCategoria: [elige UNA: acuariofilia, cocina, computacion, iluminacion, hogar, herramientas, impresion3d, mascotas, electronica, peliculas, radiocontrol, camping, agricultura, juguetes, fotografia, deportes, videojuegos, musica, estetica, arte, vehiculos, manualidades, figuras, juegosdemesa, adaptadores, erotico]\nDescripcion: [descripcion]"
+                            },
+                            {
+                                type: "image_url",
+                                image_url: {
+                                    url: `data:image/jpeg;base64,${imagenBase64}`
+                                }
+                            }
+                        ]
+                    }
+                ],
+                max_tokens: 300
+            },
+            {
+                headers: {
+                    'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 15000
             }
-        ],
-        max_tokens: 300
-    },
-    {
-        headers: {
-            'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
-            'Content-Type': 'application/json'
-        },
-        timeout: 15000
-    }
-);
+        );
 
         console.log('✅ Respuesta de DeepSeek recibida');
-        // DeepSeek devuelve la respuesta en choices[0].message.content
-       if (response.data && response.data.choices && response.data.choices.length > 0) {
-    const contenido = response.data.choices[0].message.content;
-   console.log(`📝 DeepSeek respuesta COMPLETA:`);
-console.log('>>> ' + JSON.stringify(contenido, null, 2));
-console.log('>>> Longitud: ' + contenido.length + ' caracteres');
-    return contenido;
-}
+        
+        if (response.data && response.data.choices && response.data.choices.length > 0) {
+            const contenido = response.data.choices[0].message.content;
+            console.log(`📝 DeepSeek respuesta COMPLETA:`);
+            console.log('>>> ' + JSON.stringify(contenido, null, 2));
+            console.log('>>> Longitud: ' + contenido.length + ' caracteres');
+            return contenido;
+        }
         console.log('⚠️ No se encontró respuesta en choices');
         return "Artículo no identificado";
 
@@ -150,13 +189,10 @@ console.log('>>> Longitud: ' + contenido.length + ' caracteres');
 // =============================================
 
 async function publicarFoto(id, imagenUrl, descripcion, categoria) {
-    // Si no hay categoría o no se pudo identificar, publicar en un grupo por defecto
-    let chatId = CHAT_ID; // Grupo por defecto
+    let chatId = CHAT_ID;
     
-    // Buscar el grupo correspondiente a la categoría
     if (categoria) {
         const categoriaLower = categoria.toLowerCase().trim();
-        // Buscar coincidencia exacta o parcial
         for (const [key, value] of Object.entries(GRUPOS)) {
             if (categoriaLower.includes(key) || key.includes(categoriaLower)) {
                 chatId = value;
@@ -180,7 +216,6 @@ async function publicarFoto(id, imagenUrl, descripcion, categoria) {
         const stats = fs.statSync(rutaFoto);
         console.log(`📊 Tamaño foto a publicar: ${(stats.size / 1024 / 1024).toFixed(2)}MB`);
 
-        // Enviar a Telegram
         console.log(`📤 Enviando a Telegram (${chatId})...`);
         
         await bot.sendPhoto(
@@ -191,7 +226,6 @@ async function publicarFoto(id, imagenUrl, descripcion, categoria) {
 
         console.log(`✅ Foto enviada a Telegram ID ${id}`);
 
-        // Marcar como publicada en BD
         console.log('💾 Actualizando BD: publicado = true');
         
         await pool.query(
@@ -261,35 +295,30 @@ async function procesarFotos() {
         console.log(`🏪 Outlet: ${foto.outlet || 'No especificado'}`);
         console.log(`📸 Imagen: ${foto.imagen_url}`);
 
-        // Obtener ruta de la foto
         const rutaFoto = path.join(__dirname, 'camara_backend', 'uploads', path.basename(foto.imagen_url));
         
-        // ANALIZAR con DeepSeek
-console.log('🤔 Analizando con DeepSeek...');
-const descripcion = await analizarConDeepSeek(rutaFoto);
-console.log(`📝 Descripción generada COMPLETA: ${descripcion}`);
-console.log(`📝 Longitud de descripción: ${descripcion.length} caracteres`);
+        console.log('🤔 Analizando con DeepSeek...');
+        const descripcion = await analizarConDeepSeek(rutaFoto);
+        console.log(`📝 Descripción generada COMPLETA: ${descripcion}`);
+        console.log(`📝 Longitud de descripción: ${descripcion.length} caracteres`);
 
-// Extraer categoría de la descripción
-let categoria = '';
-console.log(`🔍 Extrayendo categoría de la descripción...`);
-const categoriaMatch = descripcion.match(/Categoria[:\s]*([^\n]+)/i);
-if (categoriaMatch) {
-    categoria = categoriaMatch[1].trim();
-    console.log(`📌 Categoría detectada: "${categoria}"`);
-} else {
-    console.log(`⚠️ NO se encontró categoría en la descripción`);
-    // Intentar con otro formato
-    const categoriaMatch2 = descripcion.match(/Categoria\s*([^\n]+)/i);
-    if (categoriaMatch2) {
-        categoria = categoriaMatch2[1].trim();
-        console.log(`📌 Categoría detectada (sin dos puntos): "${categoria}"`);
-    }
-}
+        let categoria = '';
+        console.log(`🔍 Extrayendo categoría de la descripción...`);
+        const categoriaMatch = descripcion.match(/Categoria[:\s]*([^\n]+)/i);
+        if (categoriaMatch) {
+            categoria = categoriaMatch[1].trim();
+            console.log(`📌 Categoría detectada: "${categoria}"`);
+        } else {
+            console.log(`⚠️ NO se encontró categoría en la descripción`);
+            const categoriaMatch2 = descripcion.match(/Categoria\s*([^\n]+)/i);
+            if (categoriaMatch2) {
+                categoria = categoriaMatch2[1].trim();
+                console.log(`📌 Categoría detectada (sin dos puntos): "${categoria}"`);
+            }
+        }
 
-// PUBLICAR en Telegram (con la categoría)
-console.log('📤 Publicando en Telegram...');
-const exito = await publicarFoto(foto.id, foto.imagen_url, descripcion, categoria);
+        console.log('📤 Publicando en Telegram...');
+        const exito = await publicarFoto(foto.id, foto.imagen_url, descripcion, categoria);
 
         if (exito) {
             procesadas++;
@@ -299,7 +328,6 @@ const exito = await publicarFoto(foto.id, foto.imagen_url, descripcion, categori
             console.log(`❌ ID ${foto.id} falló`);
         }
 
-        // Pausa entre fotos
         if (fotos.length > 1) {
             console.log('⏳ Esperando 2 segundos antes de siguiente foto...');
             await new Promise(resolve => setTimeout(resolve, 2000));
@@ -366,11 +394,9 @@ console.log('🤖 Bot Flashoulet iniciado');
 console.log('⏱️  Consultando BD cada 30 segundos');
 console.log('====================================\n');
 
-// Ejecutar inmediatamente al iniciar
 console.log('🚀 Ejecutando primer ciclo...');
 procesarFotos();
 
-// Y luego cada 30 segundos
 setInterval(procesarFotos, 30000);
 console.log('⏰ Timer configurado: 30 segundos');
 
