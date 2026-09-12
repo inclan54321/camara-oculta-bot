@@ -3,6 +3,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
+const express = require('express');
 require('dotenv').config();
 
 console.log('🤖 Iniciando Bot Flashoulet...');
@@ -396,6 +397,29 @@ procesarFotos();
 
 setInterval(procesarFotos, 30000);
 console.log('⏰ Timer configurado: 30 segundos');
+
+// =============================================
+// MANEJO DE CIERRE
+// =============================================
+
+// =============================================
+// SERVIDOR WEB PARA RENDER (HEALTH CHECK)
+// =============================================
+
+const app = express();
+const PORT = process.env.PORT || 3001;
+
+app.get('/health', (req, res) => {
+    res.status(200).send('OK');
+});
+
+app.get('/', (req, res) => {
+    res.status(200).send('Bot Flashoulet funcionando');
+});
+
+app.listen(PORT, () => {
+    console.log(`✅ Health check corriendo en puerto ${PORT}`);
+});
 
 // =============================================
 // MANEJO DE CIERRE
