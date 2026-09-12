@@ -111,8 +111,18 @@ bot.on('message', (msg) => {
 // FUNCIÓN: Analizar con DeepSeek
 // =============================================
 
+let llamadasHoy = 0; // 🔥 PROTECCIÓN 2
+const MAX_LLAMADAS_DIA = 50;
+
 async function analizarConDeepSeek(rutaFoto) {
+    // 🔥 VERIFICAR LÍMITE DIARIO
+    if (llamadasHoy >= MAX_LLAMADAS_DIA) {
+        console.log(`⚠️ Límite diario alcanzado (${MAX_LLAMADAS_DIA}). No se analizará más hoy.`);
+        return "Límite diario alcanzado";
+    }
+
     console.log(`🤔 Analizando con DeepSeek: ${rutaFoto}`);
+    console.log(`📊 Llamadas hoy: ${llamadasHoy}/${MAX_LLAMADAS_DIA}`);
     
     try {
         if (!fs.existsSync(rutaFoto)) {
@@ -160,7 +170,8 @@ async function analizarConDeepSeek(rutaFoto) {
             }
         );
 
-        console.log('✅ Respuesta de DeepSeek recibida');
+        llamadasHoy++; // 🔥 INCREMENTAR CONTADOR
+        console.log(`✅ Respuesta de DeepSeek recibida (llamada #${llamadasHoy})`);
         
         if (response.data && response.data.choices && response.data.choices.length > 0) {
             const contenido = response.data.choices[0].message.content;
@@ -272,9 +283,19 @@ async function buscarFotosPendientes() {
 // PROCESAR FOTOS PENDIENTES
 // =============================================
 
+let procesando = false; // 🔥 PROTECCIÓN 1
+
 async function procesarFotos() {
-    const timestamp = new Date().toLocaleTimeString();
-    console.log(`\n🔍 [${timestamp}] Buscando fotos pendientes...`);
+    // Si ya hay un procesamiento en curso, saltar
+    if (procesando) {
+        console.log('⏳ Ya hay un procesamiento en curso, saltando...');
+        return;
+    }
+    procesando = true;
+
+    try {
+        const timestamp = new Date().toLocaleTimeString();
+        console.log(`\n🔍 [${timestamp}] Buscando fotos pendientes...`);
 
     const fotos = await buscarFotosPendientes();
 
@@ -333,6 +354,9 @@ async function procesarFotos() {
     }
 
     console.log(`\n📊 Resumen: ${procesadas} procesadas, ${fallidas} fallidas`);
+    } finally {
+        procesando = false; // 🔥 LIBERAR SIEMPRE
+    }
 }
 
 // =============================================
@@ -397,6 +421,15 @@ procesarFotos();
 
 setInterval(procesarFotos, 30000);
 console.log('⏰ Timer configurado: 30 segundos');
+
+// 🔥 PROTECCIÓN 3: Reiniciar contador a medianoche
+setInterval(() => {
+    const ahora = new Date();
+    if (ahora.getHours() === 0 && ahora.getMinutes() < 1) {
+        llamadasHoy = 0;
+        console.log('🔄 Contador de llamadas reiniciado');
+    }
+}, 60000);
 
 // =============================================
 // MANEJO DE CIERRE

@@ -94,6 +94,8 @@ class _CameraScreenState extends State<CameraScreen> {
 
   void _initMethodChannel() {
 
+    debugPrint('🔄 REINICIANDO METHOD CHANNEL');
+
     _platform.setMethodCallHandler(
       (call) async {
 
@@ -416,9 +418,8 @@ class _CameraScreenState extends State<CameraScreen> {
 
     _controller = null;
 
-    _platform.setMethodCallHandler(
-      null,
-    );
+    // 🔥 LIMPIAR EL HANDLER
+    _platform.setMethodCallHandler(null);
 
     super.dispose();
   }
