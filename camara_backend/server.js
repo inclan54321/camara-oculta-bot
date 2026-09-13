@@ -4,6 +4,7 @@ const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
+require('dotenv').config();
 
 const app = express();
 const port = 3001;
@@ -55,11 +56,8 @@ console.log(`📁 Archivos estáticos: /uploads -> ${uploadsDir}`);
 console.log('🔌 Conectando a PostgreSQL...');
 
 const pool = new Pool({
-    user: 'postgres',
-    host: 'localhost',
-    database: 'railway',
-    password: 'Knives1997.1',
-    port: 5432,
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
 });
 
 // =====================================================
@@ -127,11 +125,15 @@ app.post('/api/analizar', upload.single('imagen'), async (req, res) => {
 
         const imagenUrl = `/uploads/${filename}`;
 
-        const result = await pool.query(
-            `INSERT INTO fotos_camara_app (outlet, imagen_url, producto_identificado)
-             VALUES ($1, $2, $3) RETURNING *`,
-            [outlet || null, imagenUrl, producto_identificado || 'Foto tomada desde la cámara']
-        );
+      // Leer la imagen y convertirla a base64
+const imagenBuffer = fs.readFileSync(filepath);
+const imagenBase64 = imagenBuffer.toString('base64');
+
+const result = await pool.query(
+    `INSERT INTO fotos_camara_app (outlet, imagen_url, producto_identificado, imagen_base64)
+     VALUES ($1, $2, $3, $4) RETURNING *`,
+    [outlet || null, imagenUrl, producto_identificado || 'Foto tomada desde la cámara', imagenBase64]
+);
 
         res.json({
             success: true,

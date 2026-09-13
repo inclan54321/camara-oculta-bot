@@ -114,29 +114,27 @@ bot.on('message', (msg) => {
 let llamadasHoy = 0; // 🔥 PROTECCIÓN 2
 const MAX_LLAMADAS_DIA = 50;
 
-async function analizarConDeepSeek(rutaFoto) {
+async function analizarConDeepSeek(imagenBase64) {
     // 🔥 VERIFICAR LÍMITE DIARIO
     if (llamadasHoy >= MAX_LLAMADAS_DIA) {
         console.log(`⚠️ Límite diario alcanzado (${MAX_LLAMADAS_DIA}). No se analizará más hoy.`);
         return "Límite diario alcanzado";
     }
 
-    console.log(`🤔 Analizando con DeepSeek: ${rutaFoto}`);
+    console.log(`🤔 Analizando con DeepSeek (base64)`);
     console.log(`📊 Llamadas hoy: ${llamadasHoy}/${MAX_LLAMADAS_DIA}`);
     
     try {
-        if (!fs.existsSync(rutaFoto)) {
-            console.log(`❌ Archivo no existe: ${rutaFoto}`);
+        if (!imagenBase64) {
+            console.log(`❌ No hay imagen base64`);
             return "No se pudo encontrar la imagen";
         }
 
-        const stats = fs.statSync(rutaFoto);
-        console.log(`📊 Tamaño archivo: ${(stats.size / 1024 / 1024).toFixed(2)}MB`);
-
-        const imagenBase64 = fs.readFileSync(rutaFoto).toString('base64');
-        console.log('✅ Imagen convertida a base64');
+        console.log(`📊 Tamaño base64: ${(imagenBase64.length / 1024 / 1024).toFixed(2)}MB`);
 
         console.log('📤 Enviando a DeepSeek API...');
+        console.log(`📤 Modelo: deepseek-v4-flash-vision-exp`);
+        console.log(`📤 Tamaño base64: ${imagenBase64.length} caracteres`);
         
         const response = await axios.post(
             'https://api.deepseek.com/chat/completions',
@@ -159,7 +157,7 @@ async function analizarConDeepSeek(rutaFoto) {
                         ]
                     }
                 ],
-                max_tokens: 300
+                max_tokens: 1000
             },
             {
                 headers: {
@@ -172,6 +170,10 @@ async function analizarConDeepSeek(rutaFoto) {
 
         llamadasHoy++; // 🔥 INCREMENTAR CONTADOR
         console.log(`✅ Respuesta de DeepSeek recibida (llamada #${llamadasHoy})`);
+        console.log(`📦 Status HTTP: ${response.status}`);
+        console.log(`📦 Data completa: ${JSON.stringify(response.data, null, 2)}`);
+        console.log(`📦 Choices: ${JSON.stringify(response.data?.choices)}`);
+        console.log(`📦 Finish reason: ${response.data?.choices?.[0]?.finish_reason}`);
         
         if (response.data && response.data.choices && response.data.choices.length > 0) {
             const contenido = response.data.choices[0].message.content;
@@ -197,7 +199,7 @@ async function analizarConDeepSeek(rutaFoto) {
 // FUNCIÓN: Publicar en Telegram
 // =============================================
 
-async function publicarFoto(id, imagenUrl, descripcion, categoria) {
+async function publicarFoto(id, imagenBase64, descripcion, categoria) {
     let chatId = CHAT_ID;
     
     if (categoria) {
@@ -214,31 +216,29 @@ async function publicarFoto(id, imagenUrl, descripcion, categoria) {
     console.log(`📤 Publicando foto ID ${id} en chat: ${chatId}...`);
     
     try {
-        const rutaFoto = path.join(__dirname, 'camara_backend', 'uploads', path.basename(imagenUrl));
-        console.log(`📁 Ruta física: ${rutaFoto}`);
-
-        if (!fs.existsSync(rutaFoto)) {
-            console.log(`⚠️ Foto no encontrada: ${rutaFoto}`);
+        if (!imagenBase64) {
+            console.log(`⚠️ No hay imagen base64 para ID ${id}`);
             return false;
         }
 
-        const stats = fs.statSync(rutaFoto);
-        console.log(`📊 Tamaño foto a publicar: ${(stats.size / 1024 / 1024).toFixed(2)}MB`);
+        // Convertir base64 a buffer
+        const buffer = Buffer.from(imagenBase64, 'base64');
+        console.log(`📊 Tamaño foto: ${(buffer.length / 1024 / 1024).toFixed(2)}MB`);
 
         console.log(`📤 Enviando a Telegram (${chatId})...`);
         
         await bot.sendPhoto(
             chatId,
-            rutaFoto,
+            buffer,
             { caption: descripcion.substring(0, 1024) }
         );
 
         console.log(`✅ Foto enviada a Telegram ID ${id}`);
 
-        console.log('💾 Actualizando BD: publicado = true');
+        console.log('💾 Actualizando BD: publicado = true, borrando imagen');
         
         await pool.query(
-            'UPDATE fotos_camara_app SET publicado = true WHERE id = $1',
+            'UPDATE fotos_camara_app SET publicado = true, imagen_base64 = NULL WHERE id = $1',
             [id]
         );
 
@@ -263,7 +263,7 @@ async function buscarFotosPendientes() {
     
     try {
         const result = await pool.query(`
-            SELECT id, outlet, imagen_url, producto_identificado
+            SELECT id, outlet, imagen_url, producto_identificado, imagen_base64
             FROM fotos_camara_app
             WHERE publicado = false OR publicado IS NULL
             ORDER BY fecha_creacion ASC
@@ -314,10 +314,8 @@ async function procesarFotos() {
         console.log(`🏪 Outlet: ${foto.outlet || 'No especificado'}`);
         console.log(`📸 Imagen: ${foto.imagen_url}`);
 
-        const rutaFoto = path.join(__dirname, 'camara_backend', 'uploads', path.basename(foto.imagen_url));
-        
         console.log('🤔 Analizando con DeepSeek...');
-        const descripcion = await analizarConDeepSeek(rutaFoto);
+        const descripcion = await analizarConDeepSeek(foto.imagen_base64);
         console.log(`📝 Descripción generada COMPLETA: ${descripcion}`);
         console.log(`📝 Longitud de descripción: ${descripcion.length} caracteres`);
 
@@ -337,7 +335,7 @@ async function procesarFotos() {
         }
 
         console.log('📤 Publicando en Telegram...');
-        const exito = await publicarFoto(foto.id, foto.imagen_url, descripcion, categoria);
+        const exito = await publicarFoto(foto.id, foto.imagen_base64, descripcion, categoria);
 
         if (exito) {
             procesadas++;
