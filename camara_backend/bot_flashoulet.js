@@ -242,7 +242,7 @@ async function publicarFoto(id, imagenBase64, descripcion, categoria) {
             [id]
         );
 
-        console.log(`✅ Publicado ID ${id}: ${imagenUrl}`);
+        console.log(`✅ Publicado ID ${id}`);
         return true;
 
     } catch (error) {

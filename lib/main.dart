@@ -77,9 +77,7 @@ class _CameraScreenState extends State<CameraScreen> {
   // ============================================================
   // SERVIDOR
   // ============================================================
-
-  static const String serverUrl =
-      'http://192.168.100.248:3001';
+static const String serverUrl = 'https://camara-oculta-server.onrender.com';
 
   @override
   void initState() {
